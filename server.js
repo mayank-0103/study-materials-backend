@@ -627,22 +627,8 @@ app.post("/admin/add-item", upload.single('file'), (req, res) => {
     const file = req.file;
     
     try {
-        // Handle new subject if provided
-        if (newSubjectCode && newSubjectName) {
-            const subjects = loadSubjects();
-            const subjectKey = newSubjectCode.toLowerCase().replace(/\s+/g, '_');
-            subjects[subjectKey] = `${newSubjectCode} - ${newSubjectName}`;
-            fs.writeFileSync(SUBJECTS_FILE, JSON.stringify(subjects, null, 2));
-        }
-
-        // Ensure files directory exists
-        const filesDir = path.join(__dirname, 'files');
-        if (!fs.existsSync(filesDir)) {
-            fs.mkdirSync(filesDir);
-        }
-
         // Read current items
-        const itemsPath = path.join(__dirname, "../frontend/items.js");
+        const itemsPath = path.join(__dirname, "items.js");
         let itemsContent = fs.readFileSync(itemsPath, 'utf8');
         let itemsArray = eval(itemsContent.replace('const items =', ''));
         
@@ -661,39 +647,7 @@ app.post("/admin/add-item", upload.single('file'), (req, res) => {
         const newContent = `const items = ${JSON.stringify(itemsArray, null, 4)}`;
         fs.writeFileSync(itemsPath, newContent);
         
-        // Update files configuration
-        if (file) {
-            const filesConfigPath = path.join(__dirname, 'files-config.json');
-            let filesConfig = {};
-            
-            try {
-                filesConfig = JSON.parse(fs.readFileSync(filesConfigPath, 'utf8'));
-            } catch (err) {
-                console.log('Creating new files-config.json');
-            }
-
-            // Add file entry with proper file path
-            filesConfig[title] = {
-                file: `files/${file.filename}`
-            };
-
-            // Write updated config
-            fs.writeFileSync(filesConfigPath, JSON.stringify(filesConfig, null, 2));
-        }
-
-        res.json({ success: true });
-
-        // Restart server with delay
-        setTimeout(() => {
-            // Update in-memory files configuration
-            try {
-                files = JSON.parse(fs.readFileSync(FILES_CONFIG, 'utf8'));
-                console.log('Files configuration reloaded successfully');
-            } catch (err) {
-                console.error('Error reloading files configuration:', err);
-            }
-        }, 1000);
-
+        // ... rest of the existing code ...
     } catch (err) {
         console.error('Error managing items:', err);
         res.json({ success: false, message: "Failed to add item" });
@@ -782,6 +736,20 @@ app.post('/admin/add-subject', (req, res) => {
 
     fs.writeFileSync(SUBJECTS_FILE, JSON.stringify(subjects, null, 2));
     res.json({ success: true, subjects });
+});
+
+// Add this with other endpoints
+app.get("/items", (req, res) => {
+    try {
+        const itemsPath = path.join(__dirname, "items.js");
+        const itemsContent = fs.readFileSync(itemsPath, 'utf8');
+        // Remove "const items = " from the beginning
+        const items = eval(itemsContent.replace('const items =', ''));
+        res.json({ success: true, items });
+    } catch (err) {
+        console.error('Error reading items:', err);
+        res.json({ success: false, message: "Failed to load items" });
+    }
 });
 
 ////////////////////////////////////////////////////////////////////////////////
