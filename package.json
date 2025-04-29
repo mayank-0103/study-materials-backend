@@ -5,7 +5,6 @@
   "scripts": {
     "dev": "node --watch server.js",
     "start": "node server.js",
-    "restart": "node server.js"
   },
   "keywords": [],
   "author": "",
