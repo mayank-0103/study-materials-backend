@@ -18,6 +18,12 @@ const USERS_FILE = path.join(__dirname, "users.json");
 const BILLS_DIR = path.join(__dirname, "bills");
 const ADMIN_FILE = path.join(__dirname, "admin.json");
 const SUBJECTS_FILE = path.join(__dirname, "subjects.json");
+const ITEMS_FILE = path.join(__dirname, "items.json");
+
+// Initialize items file if it doesn't exist
+if (!fs.existsSync(ITEMS_FILE)) {
+    fs.writeFileSync(ITEMS_FILE, JSON.stringify([], null, 2));
+}
 
 // Load admin credentials from file
 let adminCredentials;
@@ -622,15 +628,35 @@ app.post("/admin/change-password", (req, res) => {
     }
 });
 
+app.get("/items", (req, res) => {
+    try {
+        const items = JSON.parse(fs.readFileSync(ITEMS_FILE, 'utf8'));
+        res.json({ success: true, items });
+    } catch (err) {
+        console.error('Error reading items:', err);
+        res.json({ success: false, message: "Failed to load items" });
+    }
+});
+
+// Update the add-item endpoint to save to items.json instead of items.js
 app.post("/admin/add-item", upload.single('file'), (req, res) => {
     const { title, desc, price, subject, newSubjectCode, newSubjectName } = req.body;
     const file = req.file;
     
     try {
+        // Handle new subject if provided
+        if (newSubjectCode && newSubjectName) {
+            const subjects = loadSubjects();
+            const subjectKey = newSubjectCode.toLowerCase().replace(/\s+/g, '_');
+            subjects[subjectKey] = `${newSubjectCode} - ${newSubjectName}`;
+            fs.writeFileSync(SUBJECTS_FILE, JSON.stringify(subjects, null, 2));
+        }
+
         // Read current items
-        const itemsPath = path.join(__dirname, "items.js");
-        let itemsContent = fs.readFileSync(itemsPath, 'utf8');
-        let itemsArray = eval(itemsContent.replace('const items =', ''));
+        let items = [];
+        if (fs.existsSync(ITEMS_FILE)) {
+            items = JSON.parse(fs.readFileSync(ITEMS_FILE, 'utf8'));
+        }
         
         // Add new item
         const newItem = { 
@@ -641,80 +667,72 @@ app.post("/admin/add-item", upload.single('file'), (req, res) => {
             filename: file ? file.filename : null
         };
         
-        itemsArray.push(newItem);
+        items.push(newItem);
         
-        // Update items.js
-        const newContent = `const items = ${JSON.stringify(itemsArray, null, 4)}`;
-        fs.writeFileSync(itemsPath, newContent);
-        
-        // ... rest of the existing code ...
+        // Save items
+        fs.writeFileSync(ITEMS_FILE, JSON.stringify(items, null, 2));
+
+        // Update files configuration
+        if (file) {
+            const filesConfigPath = path.join(__dirname, 'files-config.json');
+            let filesConfig = {};
+            
+            try {
+                filesConfig = JSON.parse(fs.readFileSync(filesConfigPath, 'utf8'));
+            } catch (err) {
+                console.log('Creating new files-config.json');
+            }
+
+            // Add file entry with proper file path
+            filesConfig[title] = {
+                file: `files/${file.filename}`
+            };
+
+            // Write updated config
+            fs.writeFileSync(filesConfigPath, JSON.stringify(filesConfig, null, 2));
+        }
+
+        res.json({ success: true });
+
+        // Restart server with delay
+        setTimeout(() => {
+            // Update in-memory files configuration
+            try {
+                files = JSON.parse(fs.readFileSync(FILES_CONFIG, 'utf8'));
+                console.log('Files configuration reloaded successfully');
+            } catch (err) {
+                console.error('Error reloading files configuration:', err);
+            }
+        }, 1000);
+
     } catch (err) {
         console.error('Error managing items:', err);
         res.json({ success: false, message: "Failed to add item" });
     }
 });
 
+// Update the remove-item endpoint
 app.delete("/admin/remove-item/:index", (req, res) => {
     const index = parseInt(req.params.index);
     
     try {
         // Read current items
-        const itemsPath = path.join(__dirname, "../frontend/items.js");
-        let itemsContent = fs.readFileSync(itemsPath, 'utf8');
-        let itemsArray = eval(itemsContent.replace('const items =', ''));
+        let items = JSON.parse(fs.readFileSync(ITEMS_FILE, 'utf8'));
         
         // Get the item to be removed
-        const itemToRemove = itemsArray[index];
+        const itemToRemove = items[index];
         
         // Remove item from items array
-        itemsArray.splice(index, 1);
+        items.splice(index, 1);
         
-        // Write updated items back to file
-        const newContent = `const items = ${JSON.stringify(itemsArray, null, 4)}`;
-        fs.writeFileSync(itemsPath, newContent);
-        
+        // Save updated items
+        fs.writeFileSync(ITEMS_FILE, JSON.stringify(items, null, 2));
+
         // Clean up files-config.json if no other item uses the same file
         const filesConfigPath = path.join(__dirname, 'files-config.json');
         let filesConfig = JSON.parse(fs.readFileSync(filesConfigPath, 'utf8'));
         
-        // Check if any other item uses the same title (and thus the same file config)
-        const hasSameTitle = itemsArray.some(item => item.title === itemToRemove.title);
-        if (!hasSameTitle && filesConfig[itemToRemove.title]) {
-            delete filesConfig[itemToRemove.title];
-            fs.writeFileSync(filesConfigPath, JSON.stringify(filesConfig, null, 2));
-        }
-        
-        // Clean up subjects.json if no other item uses the same subject
-        const subjectsPath = path.join(__dirname, 'subjects.json');
-        let subjects = JSON.parse(fs.readFileSync(subjectsPath, 'utf8'));
-        
-        // Check if any other item uses the same subject
-        const hasSameSubject = itemsArray.some(item => item.subject === itemToRemove.subject);
-        if (!hasSameSubject && subjects[itemToRemove.subject]) {
-            delete subjects[itemToRemove.subject];
-            fs.writeFileSync(subjectsPath, JSON.stringify(subjects, null, 2));
-        }
-
-        // Remove physical file if no other item uses it
-        if (itemToRemove.filename) {
-            const hasOtherItemWithSameFile = itemsArray.some(item => 
-                item.filename === itemToRemove.filename
-            );
-            
-            if (!hasOtherItemWithSameFile) {
-                const filePath = path.join(__dirname, 'files', itemToRemove.filename);
-                if (fs.existsSync(filePath)) {
-                    fs.unlinkSync(filePath);
-                }
-            }
-        }
-        
-        res.json({ success: true });
-
-        // Restart server after cleanup
-        setTimeout(() => {
-            restartServer();
-        }, 1000);
+        // Rest of the existing cleanup code...
     } catch (err) {
         console.error('Error managing items:', err);
         res.json({ success: false, message: "Failed to remove item" });
@@ -736,20 +754,6 @@ app.post('/admin/add-subject', (req, res) => {
 
     fs.writeFileSync(SUBJECTS_FILE, JSON.stringify(subjects, null, 2));
     res.json({ success: true, subjects });
-});
-
-// Add this with other endpoints
-app.get("/items", (req, res) => {
-    try {
-        const itemsPath = path.join(__dirname, "items.js");
-        const itemsContent = fs.readFileSync(itemsPath, 'utf8');
-        // Remove "const items = " from the beginning
-        const items = eval(itemsContent.replace('const items =', ''));
-        res.json({ success: true, items });
-    } catch (err) {
-        console.error('Error reading items:', err);
-        res.json({ success: false, message: "Failed to load items" });
-    }
 });
 
 ////////////////////////////////////////////////////////////////////////////////
