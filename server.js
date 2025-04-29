@@ -9,7 +9,7 @@ const multer = require('multer');
 const { exec } = require('child_process');
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = 3000;
 
 // Store one-time passwords
 const oneTimePasswords = new Map();
@@ -41,10 +41,7 @@ if (!fs.existsSync(BILLS_DIR)) {
 }
 
 // Middleware
-app.use(cors({
-    origin: ['https://yourusername.github.io', 'http://localhost:5500'],
-    credentials: true
-}));
+app.use(cors());
 app.use(bodyParser.json());
 
 // Downloadable files configuration
@@ -785,14 +782,6 @@ app.post('/admin/add-subject', (req, res) => {
 
     fs.writeFileSync(SUBJECTS_FILE, JSON.stringify(subjects, null, 2));
     res.json({ success: true, subjects });
-});
-
-////////////////////////////////////////////////////////////////////////////////
-// Health Check Endpoint
-////////////////////////////////////////////////////////////////////////////////
-
-app.get('/health', (req, res) => {
-    res.json({ status: 'ok' });
 });
 
 ////////////////////////////////////////////////////////////////////////////////
