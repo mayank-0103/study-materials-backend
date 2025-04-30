@@ -1,1 +1,16 @@
-[]
+[
+  {
+    "name": "aero",
+    "email": "aero",
+    "password": "aero",
+    "purchases": [
+      {
+        "title": "tyiy",
+        "price": 74,
+        "date": "30/04/2025",
+        "time": "21:55:50",
+        "timestamp": 1746030350969
+      }
+    ]
+  }
+]

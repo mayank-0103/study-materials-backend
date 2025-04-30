@@ -714,25 +714,53 @@ app.post("/admin/add-item", upload.single('file'), (req, res) => {
 // Update the remove-item endpoint
 app.delete("/admin/remove-item/:index", (req, res) => {
     const index = parseInt(req.params.index);
-    
+
     try {
         // Read current items
         let items = JSON.parse(fs.readFileSync(ITEMS_FILE, 'utf8'));
-        
+
         // Get the item to be removed
         const itemToRemove = items[index];
-        
+
         // Remove item from items array
         items.splice(index, 1);
-        
+
         // Save updated items
         fs.writeFileSync(ITEMS_FILE, JSON.stringify(items, null, 2));
 
         // Clean up files-config.json if no other item uses the same file
         const filesConfigPath = path.join(__dirname, 'files-config.json');
         let filesConfig = JSON.parse(fs.readFileSync(filesConfigPath, 'utf8'));
-        
-        // Rest of the existing cleanup code...
+
+        let fileDeleted = false;
+        if (itemToRemove && itemToRemove.filename) {
+            // Check if any other item uses this file
+            const stillUsed = items.some(it => it.filename === itemToRemove.filename);
+            if (!stillUsed) {
+                // Remove file entry from files-config.json
+                delete filesConfig[itemToRemove.title];
+                fs.writeFileSync(filesConfigPath, JSON.stringify(filesConfig, null, 2));
+
+                // Delete the file from disk
+                const filePath = path.join(__dirname, 'files', itemToRemove.filename);
+                if (fs.existsSync(filePath)) {
+                    fs.unlinkSync(filePath);
+                    fileDeleted = true;
+                }
+            } else {
+                // Only remove the entry for this title
+                delete filesConfig[itemToRemove.title];
+                fs.writeFileSync(filesConfigPath, JSON.stringify(filesConfig, null, 2));
+            }
+        }
+
+        res.json({ 
+            success: true, 
+            message: fileDeleted 
+                ? "Item and associated file deleted successfully." 
+                : "Item deleted successfully." 
+        });
+
     } catch (err) {
         console.error('Error managing items:', err);
         res.json({ success: false, message: "Failed to remove item" });
