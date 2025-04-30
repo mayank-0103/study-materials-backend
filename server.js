@@ -350,7 +350,7 @@ app.post("/checkout", (req, res) => {
         doc.pipe(writeStream);
 
         // Add logo and header
-        const logoPath = path.join(__dirname, "../frontend/LOGO.jpg");
+        const logoPath = path.resolve(__dirname, "../study-materials-frontend/LOGO.jpg");
         if (fs.existsSync(logoPath)) {
             doc.image(logoPath, 50, 45, { width: 80 });
         }
