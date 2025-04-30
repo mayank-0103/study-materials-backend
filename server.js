@@ -7,9 +7,30 @@ const PDFDocument = require('pdfkit');
 const crypto = require('crypto');
 const multer = require('multer');
 const { exec } = require('child_process');
+const cloudinary = require('cloudinary').v2;
+const { CloudinaryStorage } = require('multer-storage-cloudinary');
 
 const app = express();
 const PORT = 3000;
+
+// Configure Cloudinary
+cloudinary.config({
+  cloud_name: 'dpuq0ytmb',
+  api_key: '934439483499724',
+  api_secret: 'Se3hI2LTc8pSiq_wFxfpcfiijR8'
+});
+
+// Set up Cloudinary storage for multer
+const storage = new CloudinaryStorage({
+  cloudinary: cloudinary,
+  params: {
+    folder: 'study-materials', // Cloudinary folder name
+    allowed_formats: ['pdf'],
+    resource_type: 'raw'
+  }
+});
+
+const upload = multer({ storage: storage });
 
 // Store one-time passwords
 const oneTimePasswords = new Map();
@@ -60,19 +81,6 @@ try {
     // Create empty config if doesn't exist
     fs.writeFileSync(FILES_CONFIG, JSON.stringify({}, null, 2));
 }
-
-// Configure multer for file uploads
-const storage = multer.diskStorage({
-    destination: (req, file, cb) => {
-        cb(null, path.join(__dirname, 'files/'))
-    },
-    filename: (req, file, cb) => {
-        // Keep original filename but remove spaces
-        cb(null, file.originalname.replace(/\s+/g, '_'))
-    }
-});
-
-const upload = multer({ storage: storage });
 
 // Add this middleware after other middleware declarations
 app.use((req, res, next) => {
@@ -642,7 +650,7 @@ app.get("/items", (req, res) => {
 app.post("/admin/add-item", upload.single('file'), (req, res) => {
     const { title, desc, price, subject, newSubjectCode, newSubjectName } = req.body;
     const file = req.file;
-    
+
     try {
         // Handle new subject if provided
         if (newSubjectCode && newSubjectName) {
@@ -657,40 +665,20 @@ app.post("/admin/add-item", upload.single('file'), (req, res) => {
         if (fs.existsSync(ITEMS_FILE)) {
             items = JSON.parse(fs.readFileSync(ITEMS_FILE, 'utf8'));
         }
-        
+
         // Add new item
         const newItem = { 
             title, 
             desc, 
             price: Number(price), 
             subject,
-            filename: file ? file.filename : null
+            fileUrl: file ? file.path : null // Cloudinary URL
         };
-        
+
         items.push(newItem);
-        
+
         // Save items
         fs.writeFileSync(ITEMS_FILE, JSON.stringify(items, null, 2));
-
-        // Update files configuration
-        if (file) {
-            const filesConfigPath = path.join(__dirname, 'files-config.json');
-            let filesConfig = {};
-            
-            try {
-                filesConfig = JSON.parse(fs.readFileSync(filesConfigPath, 'utf8'));
-            } catch (err) {
-                console.log('Creating new files-config.json');
-            }
-
-            // Add file entry with proper file path
-            filesConfig[title] = {
-                file: `files/${file.filename}`
-            };
-
-            // Write updated config
-            fs.writeFileSync(filesConfigPath, JSON.stringify(filesConfig, null, 2));
-        }
 
         res.json({ success: true });
 
